@@ -1,0 +1,29 @@
+version: '3.0'
+
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: 'rabbitmq'
+    networks:
+      - sankur
+    ports:
+      - 5672:5672
+      - 15672:15672
+    volumes:
+      - ~/.docker-conf/rabbitmq/data:/var/lib/rabbitmq
+      - ~/.docker-conf/rabbitmq/log:/var/log/rabbitmq
+  vouchers-distribution:
+    build: .
+    container_name: 'vouchers-distribution'
+    networks:
+      - sankur
+    environment:
+      AMQP_URL: 'amqp://rabbitmq?connection_attempts=5&retry_delay=5'
+      QUEUE_NAME_REQUEST: 'request_queue'
+      PREFETCH_COUNT: 1
+      VOUCHERS_URL: 'https://11b16e85-25b8-4ff2-9980-f2c136ddc8b7.mock.pstmn.io'
+      VOUCHERS_STATUS_CODE: 2
+      VOUCHERS_PAGE_ITEMS: 500
+
+networks:
+  sankur: {}
