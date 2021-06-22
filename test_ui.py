@@ -161,9 +161,7 @@ if json_file_vouchers is not None:
         with col_san:
             st.success('ID санатория: %d' % sanatorium_id)
         with col_total:
-            st.warning('Доступно: %d' % total_vouchers)
-        # st.number_input('ID санатория:', value=sanatorium_id, key='sanatorium_%s' % sanatorium_id)
-        # st.number_input('Доступно:', value=total_vouchers, key='vouchers_total_%s' % sanatorium_id)
+            st.warning('Доступно путёвок к распределению: %d' % total_vouchers)
 
         # выведем пользователю настройки
         st.beta_container()
