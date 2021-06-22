@@ -9,9 +9,10 @@ if os.environ.get('AMQP_URL'):
     import pika
     from pika.adapters.blocking_connection import BlockingChannel
     from pika.spec import Basic
-    from typing import NoReturn, List, Union
-    from enum import IntEnum, unique
     from urllib.parse import urljoin
+
+from typing import NoReturn, List, Union
+from enum import IntEnum, unique
 
 
 @unique
