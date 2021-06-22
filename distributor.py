@@ -44,7 +44,10 @@ class Settings:
 
 
 class Distribution(object):
-    channel: BlockingChannel
+    try:
+        channel: BlockingChannel
+    except NameError:
+        pass
     vouchers: list
 
     # Настройки
