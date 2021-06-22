@@ -136,11 +136,16 @@ json_file_vouchers = st.sidebar.file_uploader(
     type=['json', 'txt']
 )
 if json_file_vouchers is not None:
+    vouchers_data = json.loads(json_file_vouchers.getvalue())
+    dist = Distribution(vouchers=vouchers_data.get('rows', []))
+
+    st.subheader('Входящие данные:')
+    with st.beta_expander('Список заявок'):
+        st.write(dist.df)
+
     st.header('Шаг 2')
     st.subheader('Настройка распределения:')
-    vouchers_data = json.loads(json_file_vouchers.getvalue())
 
-    dist = Distribution(vouchers=vouchers_data.get('rows', []))
     sanatoriums = dist.get_sanatoriums
     settings = []
     for sanatorium_id, total_vouchers in sanatoriums.items():
