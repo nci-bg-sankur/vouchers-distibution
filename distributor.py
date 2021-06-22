@@ -257,8 +257,12 @@ class Distribution(object):
     def stop(self) -> NoReturn:
         self.channel.stop_consuming()
 
-    # def receiver(self, ch: BlockingChannel, method: Basic.Deliver, props: pika.BasicProperties, body: bytes):
     def receiver(self, ch, method, props, body: bytes):
+        """Функция обработки входящих сообщений от брокера RabbitMQ"""
+        _ch: BlockingChannel = ch
+        _method: Basic.Deliver = method
+        _props: pika.BasicProperties = props
+        # TODO: Написать адаптер для перевода настроек в правильный формат.
         self.settings = json.loads(body)
         print(' [x] Received %r' % self.settings)
 
