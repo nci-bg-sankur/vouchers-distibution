@@ -128,6 +128,7 @@ class Distribution(object):
         """
         df = self._df
         arrivals = df['arrival_number'].max()
+        self.to_sanatorium_vouchers = []
         for sanatorium_id, total_vouchers in self.get_sanatoriums.items():
             # выделим срез данных только по текущему санаторию
             is_sanatorium = df['sanatorium_id'] == sanatorium_id
