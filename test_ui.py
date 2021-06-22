@@ -139,10 +139,6 @@ if json_file_vouchers is not None:
     vouchers_data = json.loads(json_file_vouchers.getvalue())
     dist = Distribution(vouchers=vouchers_data.get('rows', []))
 
-    st.subheader('Входящие данные:')
-    with st.beta_expander('Список заявок'):
-        st.write(dist.df)
-
     st.header('Шаг 2')
     st.subheader('Настройка распределения:')
 
@@ -160,14 +156,19 @@ if json_file_vouchers is not None:
         is_sanatorium = dist.df['sanatorium_id'] == sanatorium_id
         df_sanatorium = dist.df[is_sanatorium].sort_values(by=['date_begin', 'number'])
 
+        # выводим данные по санатория
+        col_san, col_total = st.beta_columns(2)
+        with col_san:
+            st.success('ID санатория: %d' % sanatorium_id)
+        with col_total:
+            st.warning('Доступно: %d' % total_vouchers)
+        # st.number_input('ID санатория:', value=sanatorium_id, key='sanatorium_%s' % sanatorium_id)
+        # st.number_input('Доступно:', value=total_vouchers, key='vouchers_total_%s' % sanatorium_id)
+
         # выведем пользователю настройки
         st.beta_container()
-        cols = st.beta_columns(6)
+        cols = st.beta_columns(4)
         with cols[0]:
-            st.number_input('ID санатория:', value=sanatorium_id, key='sanatorium_%s' % sanatorium_id)
-        with cols[1]:
-            st.number_input('Доступно:', value=total_vouchers, key='vouchers_total_%s' % sanatorium_id)
-        with cols[2]:
             temp_options.to_sanatorium = st.number_input(
                 label='В санаторий',
                 min_value=0,
@@ -183,7 +184,7 @@ if json_file_vouchers is not None:
                 value=temp_options.to_sanatorium_percent_value,
                 key='to_sanatorium_percent_%s' % sanatorium_id
             )
-        with cols[3]:
+        with cols[1]:
             temp_options.to_reserve = st.number_input(
                 label='В резерв',
                 min_value=0,
@@ -199,7 +200,7 @@ if json_file_vouchers is not None:
                 value=temp_options.to_reverse_percent_value,
                 key='to_reserve_percent_%s' % sanatorium_id
             )
-        with cols[4]:
+        with cols[2]:
             temp_options.to_exchange = st.number_input(
                 label='На обмен',
                 min_value=0,
@@ -215,7 +216,7 @@ if json_file_vouchers is not None:
                 value=temp_options.to_exchange_percent_value,
                 key='to_exchange_percent_%s' % sanatorium_id
             )
-        with cols[5]:
+        with cols[3]:
             temp_options.to_medical_unit = st.number_input(
                 label='В МСЧ',
                 min_value=0,
@@ -237,6 +238,7 @@ if json_file_vouchers is not None:
         # визуально разделим настройки для разных санаториев
         st.markdown('---')
 
+    st.subheader('Результаты распределения:')
     dist.settings = settings
     df = dist.dataframe
     st.write(df)
