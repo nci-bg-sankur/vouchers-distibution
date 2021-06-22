@@ -42,6 +42,7 @@ class Settings:
 
 
 class Distribution(object):
+    # channel: BlockingChannel
     channel: BlockingChannel
     vouchers: list
 
@@ -236,7 +237,8 @@ class Distribution(object):
     def stop(self) -> NoReturn:
         self.channel.stop_consuming()
 
-    def receiver(self, ch: BlockingChannel, method: Basic.Deliver, props: pika.BasicProperties, body: bytes):
+    # def receiver(self, ch: BlockingChannel, method: Basic.Deliver, props: pika.BasicProperties, body: bytes):
+    def receiver(self, ch, method, props, body: bytes):
         self.settings = json.loads(body)
         print(' [x] Received %r' % self.settings)
 
