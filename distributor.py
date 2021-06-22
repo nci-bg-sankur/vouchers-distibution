@@ -5,9 +5,12 @@ import requests
 import json
 import pandas as pd
 
-import pika
-from pika.adapters.blocking_connection import BlockingChannel
-from pika.spec import Basic
+try:
+    import pika
+    from pika.adapters.blocking_connection import BlockingChannel
+    from pika.spec import Basic
+except ModuleNotFoundError:
+    pass
 from urllib.parse import urljoin
 
 from typing import NoReturn, List, Union
