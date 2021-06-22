@@ -183,15 +183,15 @@ class Distribution(object):
         :param arrival_number: Текущий заезд.
         :param row: Текущий индекс списка путёвок.
         """
-        _to_sanatorium = to_sanatorium
-        last_row = row
-        next_arrival = False
-        if _to_sanatorium >= 2:
-            for x in range(row, row + vouchers_per_arrival, 2):
-                last_row = x
+        def get_distributions_vouchers():
+            _to_sanatorium = to_sanatorium
+            next_arrival = False
+            _last_row = row
+            for idx in range(row, row + vouchers_per_arrival, 2):
+                _last_row = idx
                 try:
-                    one = vouchers.loc[x]
-                    two = vouchers.loc[x + 1]
+                    one = vouchers.loc[idx]
+                    two = vouchers.loc[idx + 1]
                     if (one['date_begin'] == two['date_begin'] and
                             one['arrival_number'] == two['arrival_number'] == arrival_number):
                         if arrival_number == 2:
@@ -208,11 +208,26 @@ class Distribution(object):
                 except KeyError:
                     _to_sanatorium = 0
                     break
-            if next_arrival:
-                arrival_number = arrival_number + 1
+            return _to_sanatorium, _last_row, next_arrival
 
-        if _to_sanatorium > 0:
-            self.get_sanatorium_vouchers(vouchers, _to_sanatorium, vouchers_per_arrival, arrival_number, last_row + 1)
+        if to_sanatorium > 2:
+            to_sanatorium_exist, last_row, is_next_arrival = get_distributions_vouchers()
+            if is_next_arrival:
+                arrival_number = arrival_number + 1
+        elif to_sanatorium == 2:
+            to_sanatorium_exist, last_row, _ = get_distributions_vouchers()
+        else:
+            to_sanatorium_exist = 0
+            last_row = len(self.vouchers)
+
+        if to_sanatorium_exist > 0:
+            self.get_sanatorium_vouchers(
+                vouchers,
+                to_sanatorium_exist,
+                vouchers_per_arrival,
+                arrival_number,
+                (last_row + 1)
+            )
 
     def get_sanatorium_setting(self, sanatorium_id: int) -> Union[Settings, None]:
         """
