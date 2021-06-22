@@ -1,3 +1,2 @@
 librabbitmq4
-librabbitmq-dbg
 librabbitmq-dev
