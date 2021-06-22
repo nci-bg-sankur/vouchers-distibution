@@ -2,6 +2,7 @@ import math
 import streamlit as st
 import json
 import pandas as pd
+from distributor import Distribution, Settings
 
 
 class Options:
@@ -139,28 +140,20 @@ if json_file_vouchers is not None:
     st.subheader('Настройка распределения:')
     vouchers_data = json.loads(json_file_vouchers.getvalue())
 
-    df = pd.DataFrame(vouchers_data.get('rows', []))
-    sanatoriums = df['sanatorium_id'].value_counts()
-    result = pd.DataFrame(
-        columns=[
-            'Санаторий ID',
-            'Организация',
-            'Номер путёвки',
-            'Дата заезда',
-            'Дата выезда',
-            'Длительность',
-            'Заезд №',
-            'Статус',
-        ]
-    )
-
+    dist = Distribution(vouchers=vouchers_data.get('rows', []))
+    sanatoriums = dist.get_sanatoriums
+    settings = []
     for sanatorium_id, total_vouchers in sanatoriums.items():
+        # параметры настройки
+        sanatorium_settings = Settings()
+        sanatorium_settings.sanatorium_id = sanatorium_id
+
         # для каждого санатория инициализирует свой класс с настройками
         temp_options = Options(total_vouchers=total_vouchers)
 
         # выделим срез данных только по текущему санаторию
-        is_sanatorium = df['sanatorium_id'] == sanatorium_id
-        df_sanatorium = df[is_sanatorium].sort_values(by=['date_begin', 'number'])
+        is_sanatorium = dist.df['sanatorium_id'] == sanatorium_id
+        df_sanatorium = dist.df[is_sanatorium].sort_values(by=['date_begin', 'number'])
 
         # выведем пользователю настройки
         st.beta_container()
@@ -177,6 +170,7 @@ if json_file_vouchers is not None:
                 value=temp_options.to_sanatorium_value,
                 key='to_sanatorium_%s' % sanatorium_id
             )
+            sanatorium_settings.to_sanatorium = temp_options.to_sanatorium
             temp_options.to_sanatorium_percent = st.number_input(
                 label='%',
                 min_value=float(0),
@@ -184,23 +178,6 @@ if json_file_vouchers is not None:
                 value=temp_options.to_sanatorium_percent_value,
                 key='to_sanatorium_percent_%s' % sanatorium_id
             )
-
-            # распределим указанное кол-во путёвок в санаторий
-            number = temp_options.to_sanatorium
-            for index, row in df_sanatorium.iterrows():
-                if number > 0:
-                    result.loc[temp_options.to_sanatorium - number] = [
-                        row['sanatorium_id'],
-                        row['sanatorium_id'],
-                        row['number'],
-                        row['date_begin'],
-                        row['date_end'],
-                        row['duration'],
-                        row['arrival_number'],
-                        'Распределена в санаторий',
-                    ]
-                    df_sanatorium = df_sanatorium.drop(index)
-                    number = number - 1
         with cols[3]:
             temp_options.to_reserve = st.number_input(
                 label='В резерв',
@@ -209,6 +186,7 @@ if json_file_vouchers is not None:
                 value=temp_options.to_reserve,
                 key='to_reserve_%s' % sanatorium_id
             )
+            sanatorium_settings.to_reserve = temp_options.to_reserve
             temp_options.to_reserve_percent = st.number_input(
                 label='%',
                 min_value=float(0),
@@ -216,27 +194,6 @@ if json_file_vouchers is not None:
                 value=temp_options.to_reverse_percent_value,
                 key='to_reserve_percent_%s' % sanatorium_id
             )
-
-            # распределим путёвки в резерв
-            number = temp_options.to_reserve
-            for index, row in df_sanatorium.iterrows():
-                if number > 0:
-                    idx = (
-                        temp_options.to_sanatorium +
-                        temp_options.to_reserve - number
-                    )
-                    result.loc[idx] = [
-                        row['sanatorium_id'],
-                        '',
-                        row['number'],
-                        row['date_begin'],
-                        row['date_end'],
-                        row['duration'],
-                        row['arrival_number'],
-                        'В резерв УМО',
-                    ]
-                    df_sanatorium = df_sanatorium.drop(index)
-                    number = number - 1
         with cols[4]:
             temp_options.to_exchange = st.number_input(
                 label='На обмен',
@@ -245,6 +202,7 @@ if json_file_vouchers is not None:
                 value=temp_options.to_exchange,
                 key='to_exchange_%s' % sanatorium_id
             )
+            sanatorium_settings.to_exchange = temp_options.to_exchange
             temp_options.to_exchange_percent = st.number_input(
                 label='%',
                 min_value=float(0),
@@ -252,28 +210,6 @@ if json_file_vouchers is not None:
                 value=temp_options.to_exchange_percent_value,
                 key='to_exchange_percent_%s' % sanatorium_id
             )
-
-            # распределим путёвки на обмен
-            number = temp_options.to_exchange
-            for index, row in df_sanatorium.iterrows():
-                if number > 0:
-                    idx = (
-                        temp_options.to_sanatorium +
-                        temp_options.to_reserve +
-                        temp_options.to_exchange - number
-                    )
-                    result.loc[idx] = [
-                        row['sanatorium_id'],
-                        '',
-                        row['number'],
-                        row['date_begin'],
-                        row['date_end'],
-                        row['duration'],
-                        row['arrival_number'],
-                        'На обмен',
-                    ]
-                    df_sanatorium = df_sanatorium.drop(index)
-                    number = number - 1
         with cols[5]:
             temp_options.to_medical_unit = st.number_input(
                 label='В МСЧ',
@@ -282,6 +218,7 @@ if json_file_vouchers is not None:
                 value=temp_options.to_medical_unit_value,
                 key='to_medical_unit_%s' % sanatorium_id
             )
+            sanatorium_settings.to_medical_unit = temp_options.to_medical_unit
             temp_options.to_medical_unit_percent = st.number_input(
                 label='%',
                 min_value=float(0),
@@ -290,30 +227,11 @@ if json_file_vouchers is not None:
                 key='to_medical_unit_percent_%s' % sanatorium_id
             )
 
-            # добьём остатки путёвок в МСЧ
-            number = temp_options.to_medical_unit
-            for index, row in df_sanatorium.iterrows():
-                if number > 0:
-                    idx = (
-                            temp_options.to_sanatorium +
-                            temp_options.to_reserve +
-                            temp_options.to_exchange +
-                            temp_options.to_medical_unit - number
-                    )
-                    result.loc[idx] = [
-                        row['sanatorium_id'],
-                        '',
-                        row['number'],
-                        row['date_begin'],
-                        row['date_end'],
-                        row['duration'],
-                        row['arrival_number'],
-                        'В резерв МСЧ',
-                    ]
-                    df_sanatorium = df_sanatorium.drop(index)
-                    number = number - 1
+        settings.append(sanatorium_settings)
 
         # визуально разделим настройки для разных санаториев
         st.markdown('---')
 
-    st.write(result)
+    dist.settings = settings
+    df = dist.dataframe
+    st.write(df)
