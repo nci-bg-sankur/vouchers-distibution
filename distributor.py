@@ -43,7 +43,6 @@ class Settings:
 
 class Distribution(object):
     # channel: BlockingChannel
-    channel: BlockingChannel
     vouchers: list
 
     # Настройки
