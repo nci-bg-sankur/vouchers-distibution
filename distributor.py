@@ -1,16 +1,17 @@
 import math
 import sys
 import os
-import pika
 import requests
 import json
 import pandas as pd
-from pika.adapters.blocking_connection import BlockingChannel
-from pika.spec import Basic
-from typing import NoReturn, List, Union
-from enum import IntEnum, unique
-from datetime import date
-from urllib.parse import urljoin
+
+if os.environ.get('AMQP_URL'):
+    import pika
+    from pika.adapters.blocking_connection import BlockingChannel
+    from pika.spec import Basic
+    from typing import NoReturn, List, Union
+    from enum import IntEnum, unique
+    from urllib.parse import urljoin
 
 
 @unique
