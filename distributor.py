@@ -123,6 +123,7 @@ class Distribution(object):
             ],
             data=rows
         )
+        df.index += 1
         return df
 
     @property
@@ -143,7 +144,9 @@ class Distribution(object):
 
             settings = self.get_sanatorium_setting(sanatorium_id)
             vouchers_per_arrival = self.get_vouchers_per_arrival(settings.to_sanatorium, arrivals)
-            self.get_sanatorium_vouchers(df_sanatorium, settings.to_sanatorium, vouchers_per_arrival)
+            print(vouchers_per_arrival)
+
+            self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_arrival, settings.to_sanatorium)
         result = []
         if self.to_sanatorium_vouchers:
             result.extend(self.to_sanatorium_vouchers)
@@ -164,6 +167,8 @@ class Distribution(object):
         result = to_distribute / arrivals
         if not result.is_integer():
             _result = math.ceil(result)
+            if self.is_even(to_distribute) and _result == 1:
+                return 2
             if self.is_even(_result):
                 return _result
             _result = math.floor(result)
@@ -177,66 +182,50 @@ class Distribution(object):
 
     def get_sanatorium_vouchers(self,
                                 vouchers: pd.DataFrame,
-                                to_sanatorium: int,
                                 vouchers_per_arrival: int,
-                                arrival_number: int = 1,
-                                row: int = 0) -> NoReturn:
+                                total_distribute: int,
+                                arrival_number: int = 1) -> NoReturn:
         """
         Функция получает унифицированный список путёвок в санаторий.
 
         :param vouchers: Список путёвок.
-        :param to_sanatorium: Кол-во путёвок к распределению.
         :param vouchers_per_arrival: Кол-во путёвок в 1 заезде.
+        :param total_distribute: Итого к распределению.
         :param arrival_number: Текущий заезд.
-        :param row: Текущий индекс списка путёвок.
         """
-        def get_distributions_vouchers():
-            pd.options.mode.chained_assignment = None
-            _to_sanatorium = to_sanatorium
-            next_arrival = False
-            _last_row = row
-            print(row, row + vouchers_per_arrival, arrival_number)
-            for idx in range(row, row + vouchers_per_arrival, 2):
-                _last_row = idx
+        current_arrival = vouchers['arrival_number'] == arrival_number
+        vouchers_by_arrival = vouchers[current_arrival]
+        total_vouchers_in_current_arrival = len(vouchers_by_arrival.index)
+        # выполним распределение только если есть хоть какие-то путёвки после фильтрации
+        if total_vouchers_in_current_arrival:
+            # проверим чтобы кол-во путёвок в один заезд не превышало кол-во путёвок в заезде
+            if vouchers_per_arrival > total_vouchers_in_current_arrival:
+                error_msg = (f'Указано слишком большое число для распределения. '
+                             f'В заезде всего {total_vouchers_in_current_arrival} путёвок. '
+                             f'В распределение расчитано {vouchers_per_arrival} путёвок в 1 заезд.')
+                raise ValueError(error_msg)
+
+            exist_vouchers_in_arrival = vouchers_per_arrival
+            row = vouchers_by_arrival.first_valid_index()
+            while exist_vouchers_in_arrival > 0:
                 try:
-                    one = vouchers.loc[idx]
-                    two = vouchers.loc[idx + 1]
-                    if (one['date_begin'] == two['date_begin'] and
-                            one['arrival_number'] == two['arrival_number'] == arrival_number):
-                        print('--', idx, one['id'], two['id'])
-                        # if arrival_number == 2:
-                        #     print(one)
-                        #     print(two)
-                        #     print('---')
-                        one['status'] = two['status'] = VoucherStatus.TO_SANATORIUM
-                        one['organization_id'] = two['organization_id'] = one['sanatorium_id']
-                        self.to_sanatorium_vouchers.append(one)
-                        self.to_sanatorium_vouchers.append(two)
-                        _to_sanatorium = _to_sanatorium - 2
-                        next_arrival = True
+                    first_voucher = vouchers_by_arrival.loc[row].copy()
+                    second_voucher = vouchers_by_arrival.loc[row+1].copy()
+                    if first_voucher['date_begin'] == second_voucher['date_begin'] and total_distribute > 0:
+                        first_voucher['status'] = second_voucher['status'] = VoucherStatus.TO_SANATORIUM
+                        first_voucher['organization_id'] = second_voucher['organization_id'] = first_voucher['sanatorium_id']
+                        self.to_sanatorium_vouchers.append(first_voucher)
+                        self.to_sanatorium_vouchers.append(second_voucher)
+                        vouchers.drop(index=row)
+                        vouchers.drop(index=row+1)
+                        exist_vouchers_in_arrival -= 2
+                        total_distribute -= 2
+                    row += 3
                 except KeyError:
-                    _to_sanatorium = 0
-                    break
-            return _to_sanatorium, _last_row + 3, next_arrival
+                    exist_vouchers_in_arrival = 0
 
-        if to_sanatorium > 2:
-            to_sanatorium_exist, last_row, is_next_arrival = get_distributions_vouchers()
-            if is_next_arrival:
-                arrival_number = arrival_number + 1
-        elif to_sanatorium == 2:
-            to_sanatorium_exist, last_row, _ = get_distributions_vouchers()
-        else:
-            to_sanatorium_exist = 0
-            last_row = len(self.vouchers)
-
-        if to_sanatorium_exist > 0:
-            self.get_sanatorium_vouchers(
-                vouchers,
-                to_sanatorium_exist,
-                vouchers_per_arrival,
-                arrival_number,
-                last_row
-            )
+            # повторно вызываем рекурсивно функцию чтобы пройтись по всем заездам
+            self.get_sanatorium_vouchers(vouchers, vouchers_per_arrival, total_distribute, arrival_number + 1)
 
     def get_sanatorium_setting(self, sanatorium_id: int) -> Union[Settings, None]:
         """
