@@ -240,3 +240,6 @@ if json_file_vouchers is not None:
     dist.settings = settings
     df = dist.dataframe
     st.write(df)
+
+    st.subheader('Исходный список')
+    st.write(dist.df_exists)

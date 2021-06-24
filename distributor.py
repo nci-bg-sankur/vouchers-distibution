@@ -53,6 +53,7 @@ class Distribution(object):
     # Настройки
     _df: pd.DataFrame
     _settings: List[Settings]
+    _vouchers_exists: pd.DataFrame
 
     # списки путёвок после распределения
     to_sanatorium_vouchers = []
@@ -109,6 +110,39 @@ class Distribution(object):
             ]
             rows.append(row)
 
+        df = pd.DataFrame(
+            columns=[
+                'ID',
+                'Санаторий ID',
+                'Организация',
+                'Номер путёвки',
+                'Дата заезда',
+                'Дата выезда',
+                'Длительность',
+                'Заезд №',
+                'Статус',
+            ],
+            data=rows
+        )
+        df.index += 1
+        return df
+
+    @property
+    def df_exists(self):
+        rows = []
+        for idx, item in self._vouchers_exists.iterrows():
+            row = [
+                item['id'],
+                item['sanatorium_id'],
+                item['organization_id'],
+                item['number'],
+                item['date_begin'],
+                item['date_end'],
+                item['duration'],
+                item['arrival_number'],
+                ''
+            ]
+            rows.append(row)
         df = pd.DataFrame(
             columns=[
                 'ID',
@@ -223,6 +257,9 @@ class Distribution(object):
                     row += 3
                 except KeyError:
                     exist_vouchers_in_arrival = 0
+
+            # обновим информацию по остаточным путёвкам
+            self._vouchers_exists = vouchers
 
             # повторно вызываем рекурсивно функцию чтобы пройтись по всем заездам
             self.get_sanatorium_vouchers(vouchers, vouchers_per_arrival, total_distribute, arrival_number + 1)
