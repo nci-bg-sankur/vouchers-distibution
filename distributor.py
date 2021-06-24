@@ -97,6 +97,7 @@ class Distribution(object):
             else:
                 status = 'Куда-то'
             row = [
+                voucher['id'],
                 voucher['sanatorium_id'],
                 voucher['organization_id'],
                 voucher['number'],
@@ -110,6 +111,7 @@ class Distribution(object):
 
         df = pd.DataFrame(
             columns=[
+                'ID',
                 'Санаторий ID',
                 'Организация',
                 'Номер путёвки',
@@ -189,9 +191,11 @@ class Distribution(object):
         :param row: Текущий индекс списка путёвок.
         """
         def get_distributions_vouchers():
+            pd.options.mode.chained_assignment = None
             _to_sanatorium = to_sanatorium
             next_arrival = False
             _last_row = row
+            print(row, row + vouchers_per_arrival, arrival_number)
             for idx in range(row, row + vouchers_per_arrival, 2):
                 _last_row = idx
                 try:
@@ -199,11 +203,11 @@ class Distribution(object):
                     two = vouchers.loc[idx + 1]
                     if (one['date_begin'] == two['date_begin'] and
                             one['arrival_number'] == two['arrival_number'] == arrival_number):
-                        if arrival_number == 2:
-                            print(arrival_number)
-                            print(one)
-                            print(two)
-                            print('---')
+                        print('--', idx, one['id'], two['id'])
+                        # if arrival_number == 2:
+                        #     print(one)
+                        #     print(two)
+                        #     print('---')
                         one['status'] = two['status'] = VoucherStatus.TO_SANATORIUM
                         one['organization_id'] = two['organization_id'] = one['sanatorium_id']
                         self.to_sanatorium_vouchers.append(one)
@@ -213,7 +217,7 @@ class Distribution(object):
                 except KeyError:
                     _to_sanatorium = 0
                     break
-            return _to_sanatorium, _last_row, next_arrival
+            return _to_sanatorium, _last_row + 3, next_arrival
 
         if to_sanatorium > 2:
             to_sanatorium_exist, last_row, is_next_arrival = get_distributions_vouchers()
@@ -231,7 +235,7 @@ class Distribution(object):
                 to_sanatorium_exist,
                 vouchers_per_arrival,
                 arrival_number,
-                (last_row + 1)
+                last_row
             )
 
     def get_sanatorium_setting(self, sanatorium_id: int) -> Union[Settings, None]:
