@@ -205,7 +205,7 @@ class Distribution(object):
                 return 2
             if self.is_even(_result):
                 return _result
-            _result = math.floor(result)
+            _result += 1
             if self.is_even(_result):
                 return _result
         else:
@@ -306,7 +306,7 @@ class Distribution(object):
             'status__code': self.vouchers_status_code,
             'limit': limit,
             'offset': offset,
-            'sanatorium_id__in': self.sanatorium,
+            'sanatorium_id__in': self.get_sanatorium_ids,
             'date_begin__gte': self.distribution_date[0],
             'date_begin__lte': self.distribution_date[1],
         }
@@ -317,6 +317,13 @@ class Distribution(object):
             self.vouchers.extend(data['rows'])
             if data['total'] - len(self.vouchers) > 0:
                 self.get_vouchers(limit=limit, offset=len(self.vouchers) + 1)
+
+    @property
+    def get_sanatorium_ids(self):
+        ids = []
+        for setting in self.settings:
+            ids.append(str(setting.sanatorium_id))
+        return ','.join(ids)
 
     @property
     def df(self):
