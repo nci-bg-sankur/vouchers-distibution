@@ -178,7 +178,8 @@ class Distribution(object):
 
             settings = self.get_sanatorium_setting(sanatorium_id)
             vouchers_per_arrival = self.get_vouchers_per_arrival(settings.to_sanatorium, arrivals)
-            print(vouchers_per_arrival)
+            print(f'sanatorium_id={sanatorium_id}')
+            print(f'vouchers_per_arrival={vouchers_per_arrival}')
 
             self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_arrival, settings.to_sanatorium)
         result = []
@@ -230,6 +231,8 @@ class Distribution(object):
         current_arrival = vouchers['arrival_number'] == arrival_number
         vouchers_by_arrival = vouchers[current_arrival]
         total_vouchers_in_current_arrival = len(vouchers_by_arrival.index)
+        # print(f'arrival_number={arrival_number}')
+        # print(f'total_vouchers_in_current_arrival={total_vouchers_in_current_arrival}')
         # выполним распределение только если есть хоть какие-то путёвки после фильтрации
         if total_vouchers_in_current_arrival:
             # проверим чтобы кол-во путёвок в один заезд не превышало кол-во путёвок в заезде
@@ -246,6 +249,10 @@ class Distribution(object):
                     first_voucher = vouchers_by_arrival.loc[row].copy()
                     second_voucher = vouchers_by_arrival.loc[row+1].copy()
                     if first_voucher['date_begin'] == second_voucher['date_begin'] and total_distribute > 0:
+                        # print('---')
+                        # print(f'first_voucher__id={first_voucher["id"]}')
+                        # print(f'second_voucher__id={second_voucher["id"]}')
+                        # print('---')
                         first_voucher['status'] = second_voucher['status'] = VoucherStatus.TO_SANATORIUM
                         first_voucher['organization_id'] = second_voucher['organization_id'] = first_voucher['sanatorium_id']
                         self.to_sanatorium_vouchers.append(first_voucher)
@@ -254,8 +261,11 @@ class Distribution(object):
                         vouchers.drop(index=row+1)
                         exist_vouchers_in_arrival -= 2
                         total_distribute -= 2
-                    row += 3
+                        row += 2
+                    else:
+                        row += 1
                 except KeyError:
+                    # print(f'exist_vouchers_in_arrival={exist_vouchers_in_arrival}')
                     exist_vouchers_in_arrival = 0
 
             # обновим информацию по остаточным путёвкам
