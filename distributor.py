@@ -63,6 +63,12 @@ class Distribution(object):
     to_exchange_vouchers = []
     to_medical_unit_vouchers = []
 
+    # для отладки
+    dump_vouchers_per_months: List[Dict[str, List]] = []
+    dump_vouchers_per_days = []
+    dump_arrivals_per_months = []
+    dump_total_vouchers_by_months = []
+
     def __init__(self, **kwargs):
         self.vouchers = kwargs.get('vouchers', [])
 
@@ -163,6 +169,93 @@ class Distribution(object):
         return df
 
     @property
+    def contol_df(self):
+        rows = []
+        for sanatorium_idx, dump_vouchers_per_months in enumerate(self.dump_vouchers_per_months):
+            for month, month_stat in dump_vouchers_per_months.items():
+                month_str = datetime.datetime.strptime(month, '%Y-%m').strftime('%B')
+                rows.append([
+                    month_str,
+                    '%d%%' % month_stat[1],
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+                    '',
+
+                ])
+                totals_percents = 0
+                totals_5 = 0
+                totals_6 = 0
+                totals_7 = 0
+                totals_8 = 0
+                totals_9 = 0
+                for date, day_stat in self.dump_vouchers_per_days[sanatorium_idx].items():
+                    if date[:7] == month:
+                        total_vouchers_in_day_correct = day_stat[5] if len(day_stat) == 6 else day_stat[4]
+                        rows.append([
+                            date,
+                            day_stat[0],
+                            '',
+                            '',
+                            f'{day_stat[1]}%',
+                            day_stat[2],
+                            day_stat[3],
+                            day_stat[3],
+                            day_stat[4],
+                            day_stat[4],
+                            total_vouchers_in_day_correct,
+                            total_vouchers_in_day_correct - day_stat[0],
+                            '',
+                        ])
+                        totals_percents += day_stat[1]
+                        totals_5 += day_stat[2]
+                        totals_6 += day_stat[3]
+                        totals_7 += day_stat[4]
+                        totals_8 += total_vouchers_in_day_correct
+                rows.append([
+                    'ИТОГО %s' % month_str,
+                    month_stat[0],
+                    month_stat[2],
+                    month_stat[3],
+                    f'{totals_percents}%',
+                    totals_5,
+                    totals_6,
+                    totals_6,
+                    totals_7,
+                    totals_7,
+                    totals_8,
+                    '',
+                    '',
+                ])
+
+        df = pd.DataFrame(
+            columns=[
+                'День заезда',
+                '% мес/кол-во путёвок в заезде',
+                'кол-во путевок к распред помесячно',
+                'Округлить гр 3',
+                '% пут. по заездам',
+                'кол-во пут. По заездам',
+                'отбросили десятки',
+                'округлили',
+                'получили четное',
+                'Итого',
+                'Итого с корректировкой',
+                'Если > 1 то ОШИБКА',
+                'hack'
+            ],
+            data=rows
+        )
+        return df.set_index('hack', inplace=False)
+
+    @property
     def get_sanatoriums(self) -> pd.Series:
         return self._df['sanatorium_id'].value_counts()
 
@@ -170,6 +263,11 @@ class Distribution(object):
         """
         Функция формирует унифицированный список путёвок по распределению
         """
+        self.dump_arrivals_per_months = []
+        self.dump_vouchers_per_months = []
+        self.dump_vouchers_per_days = []
+        self.dump_total_vouchers_by_months = []
+
         df = self._df
         self.to_sanatorium_vouchers = []
         for sanatorium_id, total_vouchers in self.get_sanatoriums.items():
@@ -186,10 +284,12 @@ class Distribution(object):
             # получим данные для распределения по месяцам
             vouchers_per_months = self.get_vouchers_per_months(begin_dates_df, total_vouchers, settings)
             print(f'vouchers_per_months = {vouchers_per_months}')
+            self.dump_vouchers_per_months.append(vouchers_per_months)
 
             # получим данные для распределения по дням
             vouchers_per_days = self.get_vouchers_per_days(begin_dates_df, vouchers_per_months)
             print(f'vouchers_per_days = {vouchers_per_days}')
+            self.dump_vouchers_per_days.append(vouchers_per_days)
 
             self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_days)
         result = []
@@ -257,6 +357,7 @@ class Distribution(object):
             vouchers_per_days[date] = len(indexes)
 
         print(f'arrivals_per_months = {arrivals_per_months}')
+        self.dump_arrivals_per_months.append(arrivals_per_months)
 
         # сформируем массив данных для распределения по дням заезда
         for date, total_vouchers_per_day in vouchers_per_days.items():
@@ -265,6 +366,8 @@ class Distribution(object):
             cnt_vouchers_per_arrival = vouchers_per_months[data_only_month][2] * vouchers_per_arrivals
             cnt_vouchers_per_arrival_int = int(cnt_vouchers_per_arrival)
             vouchers_per_days[date] = [
+                # кол-во путёвок в день
+                total_vouchers_per_day,
                 # процент путёвок по заездам
                 vouchers_per_arrivals * 100,
                 # кол-во путёвок по заездам
@@ -284,6 +387,7 @@ class Distribution(object):
             total_vouchers_by_months[month] = total_vouchers_by_months.get(month, 0) + stat[-1]
 
         print(f'total_vouchers_by_months = {total_vouchers_by_months}')
+        self.dump_total_vouchers_by_months.append(total_vouchers_by_months)
 
         # скорректируем кол-во путёвок за заезд исходя из расчётного кол-ва путёвок в месяц.
         for month, total_vouchers_in_month in total_vouchers_by_months.items():
