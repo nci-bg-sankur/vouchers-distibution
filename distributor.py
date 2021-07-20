@@ -1,3 +1,4 @@
+import datetime
 import math
 import sys
 import os
@@ -13,7 +14,8 @@ except ModuleNotFoundError:
     pass
 from urllib.parse import urljoin
 
-from typing import NoReturn, List, Union
+from pandas.core.groupby.generic import DataFrameGroupBy
+from typing import NoReturn, List, Union, Optional, Hashable, Dict
 from enum import IntEnum, unique
 
 
@@ -36,7 +38,7 @@ class VoucherStatus(IntEnum):
 
 class Settings:
     """Настройки распределения"""
-    sanatorium_id: int
+    sanatorium_id: Optional[Hashable]
     to_sanatorium: int
     to_reserve: int
     to_exchange: int
@@ -169,23 +171,137 @@ class Distribution(object):
         Функция формирует унифицированный список путёвок по распределению
         """
         df = self._df
-        arrivals = df['arrival_number'].max()
         self.to_sanatorium_vouchers = []
         for sanatorium_id, total_vouchers in self.get_sanatoriums.items():
             # выделим срез данных только по текущему санаторию
             is_sanatorium = df['sanatorium_id'] == sanatorium_id
             df_sanatorium = df[is_sanatorium].sort_values(by=['date_begin', 'number'])
 
-            settings = self.get_sanatorium_setting(sanatorium_id)
-            vouchers_per_arrival = self.get_vouchers_per_arrival(settings.to_sanatorium, arrivals)
-            print(f'sanatorium_id={sanatorium_id}')
-            print(f'vouchers_per_arrival={vouchers_per_arrival}')
+            # сгруппируем путёвки по дате заезда (заездным дням)
+            begin_dates_df = df_sanatorium.groupby('date_begin')
 
-            self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_arrival, settings.to_sanatorium)
+            # получим настройки распределения
+            settings = self.get_sanatorium_setting(sanatorium_id)
+
+            # получим данные для распределения по месяцам
+            vouchers_per_months = self.get_vouchers_per_months(begin_dates_df, total_vouchers, settings)
+            print(f'vouchers_per_months = {vouchers_per_months}')
+
+            # получим данные для распределения по дням
+            vouchers_per_days = self.get_vouchers_per_days(begin_dates_df, vouchers_per_months)
+            print(f'vouchers_per_days = {vouchers_per_days}')
+
+            self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_days)
         result = []
         if self.to_sanatorium_vouchers:
             result.extend(self.to_sanatorium_vouchers)
         return result
+
+    @staticmethod
+    def get_vouchers_per_months(df: DataFrameGroupBy, total_vouchers: int, settings: Settings) -> Dict[str, List]:
+        """
+        Функция получает данные для распределения по месяцам.
+
+        :param df: DataFrame сгруппированный по дате заезда.
+        :param total_vouchers: Общее кол-во путёвок к распределению.
+        :param settings: Настройки распределения.
+        :return: Словарь содержащий год-месяц в виде индекса и массив из 4-х элементов, где
+                 1-ый элемент — кол-во путёвок в месяце,
+                 2-ой элемент — процент путёвок в месяце от общего числа путёвок к распределению,
+                 3-ий элемент — кол-во путёвок к распределению помесячно,
+                 4-ый элемент — кол-во путёвок к распределению помесячно (после округления),
+        """
+        vouchers_per_months = {}
+        for begin_date, indexes in df.groups.items():
+            month = begin_date[:7]
+            vouchers_in_month = vouchers_per_months.get(month, [])
+            vouchers_per_months[month] = vouchers_in_month + list(indexes)
+
+        for date, indexes in vouchers_per_months.items():
+            total_vouchers_in_month = len(indexes)
+            vouchers_in_month = total_vouchers_in_month / total_vouchers
+            vouchers_to_sanatorium_in_month = settings.to_sanatorium * vouchers_in_month
+
+            vouchers_per_months[date] = [
+                # всего путёвок в месяце
+                total_vouchers_in_month,
+
+                # процент путёвок в месяце
+                round(vouchers_in_month * 100),
+
+                # кол-во путёвок к распределению помесячно
+                vouchers_to_sanatorium_in_month,
+                round(vouchers_to_sanatorium_in_month)
+            ]
+
+        return vouchers_per_months
+
+    def get_vouchers_per_days(self, df: DataFrameGroupBy, vouchers_per_months: Dict[str, List]) -> Dict[str, List]:
+        """
+        Функция получает данные для распределения по заездным дням.
+
+        :param df: DataFrame сгруппированный по дате заезда.
+        :param vouchers_per_months: данные распределения по месяцам.
+        :return: Словарь, в виде индекса (день заезда) и массив значений из 4-х элементов, где:
+                 1-ый элемент — процент путёвок по заездам,
+                 2-ой элемент — кол-во путёвок по заездам,
+                 3-ий элемент — кол-во путёвок по заездам целочисленное (без дроби),
+                 4-ий элемент — кол-во путёвок по заездам округлённое до ближайшего чётного числа,
+                 5-ый элемент — (опциональный) скорректированное кол-во путёвок за заезд.
+        """
+        # посчитаем кол-во путёвок в день
+        vouchers_per_days = {}
+        arrivals_per_months = {}
+        for date, indexes in df.groups.items():
+            arrivals_per_months[date[:7]] = arrivals_per_months.get(date[:7], 0) + 1
+            vouchers_per_days[date] = len(indexes)
+
+        print(f'arrivals_per_months = {arrivals_per_months}')
+
+        # сформируем массив данных для распределения по дням заезда
+        for date, total_vouchers_per_day in vouchers_per_days.items():
+            data_only_month = date[:7]
+            vouchers_per_arrivals = total_vouchers_per_day / vouchers_per_months[data_only_month][0]
+            cnt_vouchers_per_arrival = vouchers_per_months[data_only_month][2] * vouchers_per_arrivals
+            cnt_vouchers_per_arrival_int = int(cnt_vouchers_per_arrival)
+            vouchers_per_days[date] = [
+                # процент путёвок по заездам
+                vouchers_per_arrivals * 100,
+                # кол-во путёвок по заездам
+                cnt_vouchers_per_arrival,
+                # кол-во путёвок по заездам целочисленное (без дроби)
+                cnt_vouchers_per_arrival_int,
+                # округляем до ближайшего чётного числа
+                cnt_vouchers_per_arrival_int if self.is_even(
+                    cnt_vouchers_per_arrival_int) else cnt_vouchers_per_arrival_int + 1,
+
+            ]
+
+        # посчитаем кол-во путёвок к распределению по месяцам после расчёта распределения по дням
+        total_vouchers_by_months = {}
+        for date, stat in vouchers_per_days.items():
+            month = date[:7]
+            total_vouchers_by_months[month] = total_vouchers_by_months.get(month, 0) + stat[-1]
+
+        print(f'total_vouchers_by_months = {total_vouchers_by_months}')
+
+        # скорректируем кол-во путёвок за заезд исходя из расчётного кол-ва путёвок в месяц.
+        for month, total_vouchers_in_month in total_vouchers_by_months.items():
+            overload_ration = vouchers_per_months[month][-1] - total_vouchers_in_month
+            abs_overload_ration = abs(overload_ration)
+            arrivals_in_month = arrivals_per_months[month]
+            overload_ration_in_day = overload_ration / arrivals_in_month
+            if overload_ration_in_day > 0:
+                overload_ration_in_day = math.ceil(overload_ration_in_day)
+            else:
+                overload_ration_in_day = math.floor(overload_ration_in_day)
+
+            for date, stat in sorted(list(vouchers_per_days.items()), reverse=True):
+                if date[:7] == month and abs_overload_ration > 0:
+                    vouchers_per_days[date].append(vouchers_per_days[date][-1] + overload_ration_in_day)
+                    abs_overload_ration -= abs(overload_ration_in_day)
+
+        return vouchers_per_days
 
     @staticmethod
     def is_even(number) -> bool:
@@ -194,87 +310,28 @@ class Distribution(object):
         """
         return number % 2 == 0
 
-    def get_vouchers_per_arrival(self, to_distribute: int, arrivals: int) -> int:
+    def get_sanatorium_vouchers(self, vouchers: pd.DataFrame, vouchers_per_days: Dict[str, List]) -> NoReturn:
         """
-        Функция вычисляет кол-во путёвок на 1 заезд. При этом возвращает всегда чётное число,
-        т.к. путёвки должны распределяться по парам.
-        """
-        result = to_distribute / arrivals
-        if not result.is_integer():
-            _result = math.ceil(result)
-            if self.is_even(to_distribute) and _result == 1:
-                return 2
-            if self.is_even(_result):
-                return _result
-            _result += 1
-            if self.is_even(_result):
-                return _result
-        else:
-            if self.is_even(result):
-                return int(result)
-            else:
-                return int(result + 1)
-
-    def get_sanatorium_vouchers(self,
-                                vouchers: pd.DataFrame,
-                                vouchers_per_arrival: int,
-                                total_distribute: int,
-                                arrival_number: int = 1) -> NoReturn:
-        """
-        Функция получает унифицированный список путёвок в санаторий.
+        Функция получает унифицированный список путёвок по расчётному плану распределения.
 
         :param vouchers: Список путёвок.
-        :param vouchers_per_arrival: Кол-во путёвок в 1 заезде.
-        :param total_distribute: Итого к распределению.
-        :param arrival_number: Текущий заезд.
+        :param vouchers_per_days: Расчётные данные распределения путёвок по заездным дням.
         """
-        current_arrival = vouchers['arrival_number'] == arrival_number
-        vouchers_by_arrival = vouchers[current_arrival]
-        total_vouchers_in_current_arrival = len(vouchers_by_arrival.index)
-        # print(f'arrival_number={arrival_number}')
-        # print(f'total_vouchers_in_current_arrival={total_vouchers_in_current_arrival}')
-        # выполним распределение только если есть хоть какие-то путёвки после фильтрации
-        if total_vouchers_in_current_arrival:
-            # проверим чтобы кол-во путёвок в один заезд не превышало кол-во путёвок в заезде
-            if vouchers_per_arrival > total_vouchers_in_current_arrival:
-                error_msg = (f'Указано слишком большое число для распределения. '
-                             f'В заезде всего {total_vouchers_in_current_arrival} путёвок. '
-                             f'В распределение расчитано {vouchers_per_arrival} путёвок в 1 заезд.')
-                raise ValueError(error_msg)
+        cnt_vouchers_to_distribute = {}
+        for date, stat in vouchers_per_days.items():
+            cnt_vouchers_to_distribute[date] = stat[-1]
 
-            exist_vouchers_in_arrival = vouchers_per_arrival
-            row = vouchers_by_arrival.first_valid_index()
-            while exist_vouchers_in_arrival > 0:
-                try:
-                    first_voucher = vouchers_by_arrival.loc[row].copy()
-                    second_voucher = vouchers_by_arrival.loc[row+1].copy()
-                    if first_voucher['date_begin'] == second_voucher['date_begin'] and total_distribute > 0:
-                        # print('---')
-                        # print(f'first_voucher__id={first_voucher["id"]}')
-                        # print(f'second_voucher__id={second_voucher["id"]}')
-                        # print('---')
-                        first_voucher['status'] = second_voucher['status'] = VoucherStatus.TO_SANATORIUM
-                        first_voucher['organization_id'] = second_voucher['organization_id'] = first_voucher['sanatorium_id']
-                        self.to_sanatorium_vouchers.append(first_voucher)
-                        self.to_sanatorium_vouchers.append(second_voucher)
-                        vouchers.drop(index=row)
-                        vouchers.drop(index=row+1)
-                        exist_vouchers_in_arrival -= 2
-                        total_distribute -= 2
-                        row += 2
-                    else:
-                        row += 1
-                except KeyError:
-                    # print(f'exist_vouchers_in_arrival={exist_vouchers_in_arrival}')
-                    exist_vouchers_in_arrival = 0
+        for index, row in vouchers.iterrows():
+            if cnt_vouchers_to_distribute[row['date_begin']] > 0:
+                voucher_to_distribute = row.copy()
+                voucher_to_distribute['status'] = VoucherStatus.TO_SANATORIUM
+                voucher_to_distribute['organization_id'] = voucher_to_distribute['sanatorium_id']
+                self.to_sanatorium_vouchers.append(voucher_to_distribute)
+                cnt_vouchers_to_distribute[row['date_begin']] -= 1
+                vouchers.drop(index=index)
+        self._vouchers_exists = vouchers
 
-            # обновим информацию по остаточным путёвкам
-            self._vouchers_exists = vouchers
-
-            # повторно вызываем рекурсивно функцию чтобы пройтись по всем заездам
-            self.get_sanatorium_vouchers(vouchers, vouchers_per_arrival, total_distribute, arrival_number + 1)
-
-    def get_sanatorium_setting(self, sanatorium_id: int) -> Union[Settings, None]:
+    def get_sanatorium_setting(self, sanatorium_id: Optional[Hashable]) -> Union[Settings, None]:
         """
         Функция находит и возвращает параметры распределения для конкретного санатория.
         """
