@@ -139,8 +139,8 @@ if json_file_vouchers is not None:
     vouchers_data = json.loads(json_file_vouchers.getvalue())
     dist = Distribution(vouchers=vouchers_data.get('rows', []))
 
-    st.header('Шаг 2')
-    st.subheader('Настройка распределения:')
+    st.sidebar.header('Шаг 2')
+    st.sidebar.subheader('Настройка распределения:')
 
     sanatoriums = dist.get_sanatoriums
     settings = []
@@ -157,89 +157,72 @@ if json_file_vouchers is not None:
         df_sanatorium = dist.df[is_sanatorium].sort_values(by=['date_begin', 'number'])
 
         # выводим данные по санатория
-        col_san, col_total = st.beta_columns(2)
-        with col_san:
-            st.success('ID санатория: %d' % sanatorium_id)
-        with col_total:
-            st.warning('Доступно путёвок к распределению: %d' % total_vouchers)
+        st.sidebar.success('ID санатория: %d' % sanatorium_id)
+        st.sidebar.warning('Доступно путёвок к распределению: %d' % total_vouchers)
 
         # выведем пользователю настройки
-        st.beta_container()
-        cols = st.beta_columns(4)
-        with cols[0]:
-            temp_options.to_sanatorium = st.number_input(
-                label='В санаторий',
-                min_value=0,
-                max_value=temp_options.to_sanatorium_max_value,
-                value=temp_options.to_sanatorium_value,
-                key='to_sanatorium_%s' % sanatorium_id
-            )
-            sanatorium_settings.to_sanatorium = temp_options.to_sanatorium
-            temp_options.to_sanatorium_percent = st.number_input(
-                label='%',
-                min_value=float(0),
-                max_value=float(100),
-                value=temp_options.to_sanatorium_percent_value,
-                key='to_sanatorium_percent_%s' % sanatorium_id
-            )
-        with cols[1]:
-            temp_options.to_reserve = st.number_input(
-                label='В резерв',
-                min_value=0,
-                max_value=temp_options.to_reserve_max_value,
-                value=temp_options.to_reserve,
-                key='to_reserve_%s' % sanatorium_id
-            )
-            sanatorium_settings.to_reserve = temp_options.to_reserve
-            temp_options.to_reserve_percent = st.number_input(
-                label='%',
-                min_value=float(0),
-                max_value=float(100),
-                value=temp_options.to_reverse_percent_value,
-                key='to_reserve_percent_%s' % sanatorium_id
-            )
-        with cols[2]:
-            temp_options.to_exchange = st.number_input(
-                label='На обмен',
-                min_value=0,
-                max_value=temp_options.to_exchange_max_value,
-                value=temp_options.to_exchange,
-                key='to_exchange_%s' % sanatorium_id
-            )
-            sanatorium_settings.to_exchange = temp_options.to_exchange
-            temp_options.to_exchange_percent = st.number_input(
-                label='%',
-                min_value=float(0),
-                max_value=float(100),
-                value=temp_options.to_exchange_percent_value,
-                key='to_exchange_percent_%s' % sanatorium_id
-            )
-        with cols[3]:
-            temp_options.to_medical_unit = st.number_input(
-                label='В МСЧ',
-                min_value=0,
-                max_value=temp_options.to_medical_unit_max_value,
-                value=temp_options.to_medical_unit_value,
-                key='to_medical_unit_%s' % sanatorium_id
-            )
-            sanatorium_settings.to_medical_unit = temp_options.to_medical_unit
-            temp_options.to_medical_unit_percent = st.number_input(
-                label='%',
-                min_value=float(0),
-                max_value=float(100),
-                value=temp_options.to_medical_unit_percent_value,
-                key='to_medical_unit_percent_%s' % sanatorium_id
-            )
+        temp_options.to_sanatorium = st.sidebar.number_input(
+            label='В санаторий',
+            min_value=0,
+            max_value=temp_options.to_sanatorium_max_value,
+            value=temp_options.to_sanatorium_value,
+            key='to_sanatorium_%s' % sanatorium_id
+        )
+        sanatorium_settings.to_sanatorium = temp_options.to_sanatorium
+        temp_options.to_sanatorium_percent = st.sidebar.info(f'{temp_options.to_sanatorium_percent_value}%')
+
+        temp_options.to_reserve = st.sidebar.number_input(
+            label='В резерв',
+            min_value=0,
+            max_value=temp_options.to_reserve_max_value,
+            value=temp_options.to_reserve,
+            key='to_reserve_%s' % sanatorium_id
+        )
+        sanatorium_settings.to_reserve = temp_options.to_reserve
+        temp_options.to_reserve_percent = st.sidebar.info(f'{temp_options.to_reverse_percent_value}%')
+
+        temp_options.to_exchange = st.sidebar.number_input(
+            label='На обмен',
+            min_value=0,
+            max_value=temp_options.to_exchange_max_value,
+            value=temp_options.to_exchange,
+            key='to_exchange_%s' % sanatorium_id
+        )
+        sanatorium_settings.to_exchange = temp_options.to_exchange
+        temp_options.to_exchange_percent = st.sidebar.info(f'{temp_options.to_exchange_percent_value}%')
+
+        temp_options.to_medical_unit = st.sidebar.number_input(
+            label='В МСЧ',
+            min_value=0,
+            max_value=temp_options.to_medical_unit_max_value,
+            value=temp_options.to_medical_unit_value,
+            key='to_medical_unit_%s' % sanatorium_id
+        )
+        sanatorium_settings.to_medical_unit = temp_options.to_medical_unit
+        temp_options.to_medical_unit_percent = st.sidebar.info(f'{temp_options.to_medical_unit_percent_value}%')
 
         settings.append(sanatorium_settings)
 
         # визуально разделим настройки для разных санаториев
-        st.markdown('---')
+        st.sidebar.markdown('---')
 
-    st.subheader('Результаты распределения:')
+    st.header('Результаты распределения')
     dist.settings = settings
     df = dist.dataframe
     st.write(df)
+
+    st.subheader('Контрольная таблица')
+    control_df = dist.contol_df.set_index('День заезда')
+
+    idx = pd.IndexSlice
+
+
+    def hightlight(s: pd.Series):
+        if type(s) == str and '%' in s:
+            return ['background-color: #deedf2; color: #000']*len(s)
+        return [''] * len(s)
+
+    st.dataframe(control_df.style.apply(hightlight, subset='% мес/кол-во путёвок в заезде'))
 
     st.subheader('Исходный список')
     st.write(dist.df_exists)

@@ -187,7 +187,6 @@ class Distribution(object):
                     '',
                     '',
                     '',
-                    '',
 
                 ])
                 totals_percents = 0
@@ -195,7 +194,6 @@ class Distribution(object):
                 totals_6 = 0
                 totals_7 = 0
                 totals_8 = 0
-                totals_9 = 0
                 for date, day_stat in self.dump_vouchers_per_days[sanatorium_idx].items():
                     if date[:7] == month:
                         total_vouchers_in_day_correct = day_stat[5] if len(day_stat) == 6 else day_stat[4]
@@ -204,7 +202,7 @@ class Distribution(object):
                             day_stat[0],
                             '',
                             '',
-                            f'{day_stat[1]}%',
+                            day_stat[1],
                             day_stat[2],
                             day_stat[3],
                             day_stat[3],
@@ -212,7 +210,6 @@ class Distribution(object):
                             day_stat[4],
                             total_vouchers_in_day_correct,
                             total_vouchers_in_day_correct - day_stat[0],
-                            '',
                         ])
                         totals_percents += day_stat[1]
                         totals_5 += day_stat[2]
@@ -224,14 +221,13 @@ class Distribution(object):
                     month_stat[0],
                     month_stat[2],
                     month_stat[3],
-                    f'{totals_percents}%',
+                    totals_percents,
                     totals_5,
                     totals_6,
                     totals_6,
                     totals_7,
                     totals_7,
                     totals_8,
-                    '',
                     '',
                 ])
 
@@ -249,11 +245,10 @@ class Distribution(object):
                 'Итого',
                 'Итого с корректировкой',
                 'Если > 1 то ОШИБКА',
-                'hack'
             ],
             data=rows
         )
-        return df.set_index('hack', inplace=False)
+        return df
 
     @property
     def get_sanatoriums(self) -> pd.Series:
