@@ -214,15 +214,7 @@ if json_file_vouchers is not None:
     st.subheader('Контрольная таблица')
     control_df = dist.contol_df.set_index('День заезда')
 
-    idx = pd.IndexSlice
-
-
-    def hightlight(s: pd.Series):
-        if type(s) == str and '%' in s:
-            return ['background-color: #deedf2; color: #000']*len(s)
-        return [''] * len(s)
-
-    st.dataframe(control_df.style.apply(hightlight, subset='% мес/кол-во путёвок в заезде'))
+    st.dataframe(control_df)
 
     st.subheader('Исходный список')
     st.write(dist.df_exists)
