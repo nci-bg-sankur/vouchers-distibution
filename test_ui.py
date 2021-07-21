@@ -216,5 +216,5 @@ if json_file_vouchers is not None:
 
     st.dataframe(control_df)
 
-    st.subheader('Исходный список')
-    st.write(dist.df_exists)
+    with st.beta_expander('Исходный список'):
+        st.write(dist.df_exists)
