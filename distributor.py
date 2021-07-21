@@ -278,12 +278,12 @@ class Distribution(object):
 
             # получим данные для распределения по месяцам
             vouchers_per_months = self.get_vouchers_per_months(begin_dates_df, total_vouchers, settings)
-            print(f'vouchers_per_months = {vouchers_per_months}')
+            # print(f'vouchers_per_months = {vouchers_per_months}')
             self.dump_vouchers_per_months.append(vouchers_per_months)
 
             # получим данные для распределения по дням
             vouchers_per_days = self.get_vouchers_per_days(begin_dates_df, vouchers_per_months)
-            print(f'vouchers_per_days = {vouchers_per_days}')
+            # print(f'vouchers_per_days = {vouchers_per_days}')
             self.dump_vouchers_per_days.append(vouchers_per_days)
 
             self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_days)
@@ -312,10 +312,14 @@ class Distribution(object):
             vouchers_in_month = vouchers_per_months.get(month, [])
             vouchers_per_months[month] = vouchers_in_month + list(indexes)
 
+        total_vouchers_to_sanatorium_by_months = 0
+
         for date, indexes in vouchers_per_months.items():
             total_vouchers_in_month = len(indexes)
             vouchers_in_month = total_vouchers_in_month / total_vouchers
             vouchers_to_sanatorium_in_month = settings.to_sanatorium * vouchers_in_month
+            vouchers_to_sanatorium_in_month_round = round(vouchers_to_sanatorium_in_month)
+            total_vouchers_to_sanatorium_by_months += vouchers_to_sanatorium_in_month_round
 
             vouchers_per_months[date] = [
                 # всего путёвок в месяце
@@ -326,8 +330,15 @@ class Distribution(object):
 
                 # кол-во путёвок к распределению помесячно
                 vouchers_to_sanatorium_in_month,
-                round(vouchers_to_sanatorium_in_month)
+                vouchers_to_sanatorium_in_month_round
             ]
+
+        # проверим насколько получилось правильно посчитать заявок в заездные день за все месяцы,
+        # если общее число не равно указанному кол-во путёвок на распределение — добавим/вычтем
+        # недостающие в последний месяц
+        if total_vouchers_to_sanatorium_by_months != settings.to_sanatorium:
+            fault_vouchers_count = settings.to_sanatorium - total_vouchers_to_sanatorium_by_months
+            vouchers_per_months[list(vouchers_per_months.keys())[-1]][-1] += fault_vouchers_count
 
         return vouchers_per_months
 
@@ -351,7 +362,7 @@ class Distribution(object):
             arrivals_per_months[date[:7]] = arrivals_per_months.get(date[:7], 0) + 1
             vouchers_per_days[date] = len(indexes)
 
-        print(f'arrivals_per_months = {arrivals_per_months}')
+        # print(f'arrivals_per_months = {arrivals_per_months}')
         self.dump_arrivals_per_months.append(arrivals_per_months)
 
         # сформируем массив данных для распределения по дням заезда
@@ -381,15 +392,16 @@ class Distribution(object):
             month = date[:7]
             total_vouchers_by_months[month] = total_vouchers_by_months.get(month, 0) + stat[-1]
 
-        print(f'total_vouchers_by_months = {total_vouchers_by_months}')
+        # print(f'total_vouchers_by_months = {total_vouchers_by_months}')
         self.dump_total_vouchers_by_months.append(total_vouchers_by_months)
 
         # скорректируем кол-во путёвок за заезд исходя из расчётного кол-ва путёвок в месяц.
         for month, total_vouchers_in_month in total_vouchers_by_months.items():
-            overload_ration = vouchers_per_months[month][-1] - total_vouchers_in_month
-            abs_overload_ration = abs(overload_ration)
+            overload_ratio = vouchers_per_months[month][-1] - total_vouchers_in_month
+            print(f'overload_ratio = {overload_ratio}')
+            abs_overload_ration = abs(overload_ratio)
             arrivals_in_month = arrivals_per_months[month]
-            overload_ration_in_day = overload_ration / arrivals_in_month
+            overload_ration_in_day = overload_ratio / arrivals_in_month
             if overload_ration_in_day > 0:
                 overload_ration_in_day = math.ceil(overload_ration_in_day)
             else:
