@@ -278,12 +278,10 @@ class Distribution(object):
 
             # получим данные для распределения по месяцам
             vouchers_per_months = self.get_vouchers_per_months(begin_dates_df, total_vouchers, settings)
-            # print(f'vouchers_per_months = {vouchers_per_months}')
             self.dump_vouchers_per_months.append(vouchers_per_months)
 
             # получим данные для распределения по дням
             vouchers_per_days = self.get_vouchers_per_days(begin_dates_df, vouchers_per_months)
-            # print(f'vouchers_per_days = {vouchers_per_days}')
             self.dump_vouchers_per_days.append(vouchers_per_days)
 
             self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_days)
@@ -362,7 +360,6 @@ class Distribution(object):
             arrivals_per_months[date[:7]] = arrivals_per_months.get(date[:7], 0) + 1
             vouchers_per_days[date] = len(indexes)
 
-        # print(f'arrivals_per_months = {arrivals_per_months}')
         self.dump_arrivals_per_months.append(arrivals_per_months)
 
         # сформируем массив данных для распределения по дням заезда
@@ -392,13 +389,11 @@ class Distribution(object):
             month = date[:7]
             total_vouchers_by_months[month] = total_vouchers_by_months.get(month, 0) + stat[-1]
 
-        # print(f'total_vouchers_by_months = {total_vouchers_by_months}')
         self.dump_total_vouchers_by_months.append(total_vouchers_by_months)
 
         # скорректируем кол-во путёвок за заезд исходя из расчётного кол-ва путёвок в месяц.
         for month, total_vouchers_in_month in total_vouchers_by_months.items():
             overload_ratio = vouchers_per_months[month][-1] - total_vouchers_in_month
-            print(f'overload_ratio = {overload_ratio}')
             abs_overload_ration = abs(overload_ratio)
             arrivals_in_month = arrivals_per_months[month]
             overload_ration_in_day = overload_ratio / arrivals_in_month
@@ -408,8 +403,13 @@ class Distribution(object):
                 overload_ration_in_day = math.floor(overload_ration_in_day)
 
             for date, stat in sorted(list(vouchers_per_days.items()), reverse=True):
-                if date[:7] == month and abs_overload_ration > 0:
-                    vouchers_per_days[date].append(vouchers_per_days[date][-1] + overload_ration_in_day)
+                new_vouchers_per_arrival = vouchers_per_days[date][-1] + overload_ration_in_day
+                if (
+                        date[:7] == month and
+                        abs_overload_ration > 0 and
+                        vouchers_per_days[date][0] >= new_vouchers_per_arrival
+                ):
+                    vouchers_per_days[date].append(new_vouchers_per_arrival)
                     abs_overload_ration -= abs(overload_ration_in_day)
 
         return vouchers_per_days
