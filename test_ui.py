@@ -1,7 +1,10 @@
-import math
-import streamlit as st
 import json
+import math
+
+import numpy as np
 import pandas as pd
+import streamlit as st
+
 from distributor import Distribution, Settings
 
 
@@ -214,7 +217,37 @@ if json_file_vouchers is not None:
     st.subheader('Контрольная таблица')
     control_df = dist.contol_df.set_index('День заезда')
 
-    st.dataframe(control_df)
+    COLUMNS_CHECK = {}
+
+    def highlight_error(x: pd.Series, color: str):
+        results = {}
+        for row_name, row_value in x.items():
+            results[row_name] = None
+
+            if COLUMNS_CHECK.get(row_name, False):
+                COLUMNS_CHECK[row_name].append(row_value)
+            else:
+                COLUMNS_CHECK[row_name] = [row_value]
+
+            if len(COLUMNS_CHECK[row_name]) == 2:
+                try:
+                    if COLUMNS_CHECK[row_name][0] < abs(COLUMNS_CHECK[row_name][1]) or COLUMNS_CHECK[row_name][1] > 0:
+                        results[row_name] = f'color:{color};'
+                except TypeError:
+                    pass
+        return pd.Series(data=results, index=x.keys())
+
+
+    st.dataframe(
+        control_df.style.apply(
+            highlight_error,
+            color='red',
+            subset=[
+                '% мес/кол-во путёвок в заезде',
+                'Если > 1 то ОШИБКА',
+            ]
+        )
+    )
 
     with st.beta_expander('Исходный список'):
         st.write(dist.df_exists)
