@@ -56,6 +56,7 @@ class Distribution(object):
     _df: pd.DataFrame
     _settings: List[Settings]
     _vouchers_exists: pd.DataFrame
+    _total_vouchers_by_months: dict
 
     # списки путёвок после распределения
     to_sanatorium_vouchers = []
@@ -383,36 +384,56 @@ class Distribution(object):
 
             ]
 
-        # посчитаем кол-во путёвок к распределению по месяцам после расчёта распределения по дням
-        total_vouchers_by_months = {}
+        need_correction = self._get_total_vouchers_by_months(vouchers_per_days, vouchers_per_months)
+        while need_correction:
+            # скорректируем кол-во путёвок за заезд исходя из расчётного кол-ва путёвок в месяц:
+            for month, total_vouchers_in_month in self._total_vouchers_by_months.items():
+                overload_ratio = vouchers_per_months[month][-1] - total_vouchers_in_month
+                abs_overload_ratio = abs(overload_ratio)
+                arrivals_in_month = arrivals_per_months[month]
+                overload_ration_in_day = overload_ratio / arrivals_in_month
+                if overload_ration_in_day > 0:
+                    overload_ration_in_day = math.ceil(overload_ration_in_day)
+                else:
+                    overload_ration_in_day = math.floor(overload_ration_in_day)
+
+                if overload_ration_in_day:
+                    for date, stat in sorted(list(vouchers_per_days.items()), reverse=True):
+                        new_vouchers_per_arrival = vouchers_per_days[date][-1] + overload_ration_in_day
+                        if (
+                                date[:7] == month and
+                                abs_overload_ratio > 0 and
+                                vouchers_per_days[date][0] >= new_vouchers_per_arrival
+                        ):
+                            vouchers_per_days[date].append(new_vouchers_per_arrival)
+                            abs_overload_ratio -= abs(overload_ration_in_day)
+            # Уберём переполнение, если оно есть:
+            for date, start in sorted(list(vouchers_per_days.items()), reverse=True):
+                if vouchers_per_days[date][-1] > vouchers_per_days[date][0]:
+                    vouchers_per_days[date][-1] = vouchers_per_days[date][0]
+            need_correction = self._get_total_vouchers_by_months(vouchers_per_days, vouchers_per_months)
+        return vouchers_per_days
+
+    def _get_total_vouchers_by_months(self, vouchers_per_days: dict, vouchers_per_months: dict) -> bool:
+        """
+        Функция считает общее кол-во путёвок по месяцам, сохраняет этот список в словаре
+        и в случае необходимости корректироваки возвращает True.
+
+        :param vouchers_per_days: Список путёвок.
+        :param vouchers_per_months: Список месяцев с расчётными данным.
+        :return: True — если необходимо корректировка, False — есть корректировка не требуется.
+        """
+        need_to_correct = False
+        self._total_vouchers_by_months = {}
         for date, stat in vouchers_per_days.items():
             month = date[:7]
-            total_vouchers_by_months[month] = total_vouchers_by_months.get(month, 0) + stat[-1]
+            self._total_vouchers_by_months[month] = self._total_vouchers_by_months.get(month, 0) + stat[-1]
+        self.dump_total_vouchers_by_months.append(self._total_vouchers_by_months)
+        for month, total_vouchers_in_month in self._total_vouchers_by_months.items():
+            if vouchers_per_months[month][-1] - total_vouchers_in_month:
+                need_to_correct = True
+        return need_to_correct
 
-        self.dump_total_vouchers_by_months.append(total_vouchers_by_months)
-
-        # скорректируем кол-во путёвок за заезд исходя из расчётного кол-ва путёвок в месяц.
-        for month, total_vouchers_in_month in total_vouchers_by_months.items():
-            overload_ratio = vouchers_per_months[month][-1] - total_vouchers_in_month
-            abs_overload_ration = abs(overload_ratio)
-            arrivals_in_month = arrivals_per_months[month]
-            overload_ration_in_day = overload_ratio / arrivals_in_month
-            if overload_ration_in_day > 0:
-                overload_ration_in_day = math.ceil(overload_ration_in_day)
-            else:
-                overload_ration_in_day = math.floor(overload_ration_in_day)
-
-            for date, stat in sorted(list(vouchers_per_days.items()), reverse=True):
-                new_vouchers_per_arrival = vouchers_per_days[date][-1] + overload_ration_in_day
-                if (
-                        date[:7] == month and
-                        abs_overload_ration > 0 and
-                        vouchers_per_days[date][0] >= new_vouchers_per_arrival
-                ):
-                    vouchers_per_days[date].append(new_vouchers_per_arrival)
-                    abs_overload_ration -= abs(overload_ration_in_day)
-
-        return vouchers_per_days
 
     @staticmethod
     def is_even(number) -> bool:
