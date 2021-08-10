@@ -1,10 +1,11 @@
 import datetime
-import math
-import sys
-import os
-import requests
 import json
+import math
+import os
+import sys
+
 import pandas as pd
+import requests
 
 try:
     import pika
@@ -65,8 +66,8 @@ class Distribution(object):
     to_medical_unit_vouchers = []
 
     # для отладки
-    dump_vouchers_per_months: List[Dict[str, List]] = []
-    dump_vouchers_per_days = []
+    dump_vouchers_per_months = {}
+    dump_vouchers_per_days = {}
     dump_arrivals_per_months = []
     dump_total_vouchers_by_months = []
 
@@ -104,6 +105,8 @@ class Distribution(object):
         for voucher in vouchers:
             if voucher['status'] == VoucherStatus.TO_SANATORIUM:
                 status = 'В санаторий'
+            elif voucher['status'] == VoucherStatus.TO_RESERVE:
+                status = 'В резерв'
             else:
                 status = 'Куда-то'
             row = [
@@ -169,10 +172,9 @@ class Distribution(object):
         df.index += 1
         return df
 
-    @property
-    def contol_df(self):
+    def get_control_df(self, direction: str):
         rows = []
-        for sanatorium_idx, dump_vouchers_per_months in enumerate(self.dump_vouchers_per_months):
+        for sanatorium_idx, dump_vouchers_per_months in enumerate(self.dump_vouchers_per_months[direction]):
             for month, month_stat in dump_vouchers_per_months.items():
                 month_str = datetime.datetime.strptime(month, '%Y-%m').strftime('%B')
                 rows.append([
@@ -195,7 +197,7 @@ class Distribution(object):
                 totals_6 = 0
                 totals_7 = 0
                 totals_8 = 0
-                for date, day_stat in self.dump_vouchers_per_days[sanatorium_idx].items():
+                for date, day_stat in self.dump_vouchers_per_days[direction][sanatorium_idx].items():
                     if date[:7] == month:
                         total_vouchers_in_day_correct = day_stat[5] if len(day_stat) == 6 else day_stat[4]
                         rows.append([
@@ -260,8 +262,8 @@ class Distribution(object):
         Функция формирует унифицированный список путёвок по распределению
         """
         self.dump_arrivals_per_months = []
-        self.dump_vouchers_per_months = []
-        self.dump_vouchers_per_days = []
+        self.dump_vouchers_per_months = {'to_sanatorium': [], 'to_reserve': []}
+        self.dump_vouchers_per_days = {'to_sanatorium': [], 'to_reserve': []}
         self.dump_total_vouchers_by_months = []
 
         df = self._df
@@ -277,28 +279,37 @@ class Distribution(object):
             # получим настройки распределения
             settings = self.get_sanatorium_setting(sanatorium_id)
 
-            # получим данные для распределения по месяцам
-            vouchers_per_months = self.get_vouchers_per_months(begin_dates_df, total_vouchers, settings)
-            self.dump_vouchers_per_months.append(vouchers_per_months)
+            # начнём распределение по заданным направлениям
+            for direction in ['to_sanatorium', 'to_reserve']:
+                # получим данные для распределения по месяцам
+                vouchers_per_months = self.get_vouchers_per_months(begin_dates_df, total_vouchers, settings, direction)
+                self.dump_vouchers_per_months[direction].append(vouchers_per_months)
 
-            # получим данные для распределения по дням
-            vouchers_per_days = self.get_vouchers_per_days(begin_dates_df, vouchers_per_months)
-            self.dump_vouchers_per_days.append(vouchers_per_days)
+                # получим данные для распределения по дням
+                vouchers_per_days = self.get_vouchers_per_days(begin_dates_df, vouchers_per_months)
+                self.dump_vouchers_per_days[direction].append(vouchers_per_days)
 
-            self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_days)
+                # вытащим посчитанные путёвки из общего массива путёвок в санатории
+                self.get_sanatorium_vouchers(df_sanatorium, vouchers_per_days, direction)
         result = []
         if self.to_sanatorium_vouchers:
             result.extend(self.to_sanatorium_vouchers)
         return result
 
     @staticmethod
-    def get_vouchers_per_months(df: DataFrameGroupBy, total_vouchers: int, settings: Settings) -> Dict[str, List]:
+    def get_vouchers_per_months(
+            df: DataFrameGroupBy,
+            total_vouchers: int,
+            settings: Settings,
+            direction: str,
+    ) -> Dict[str, List]:
         """
         Функция получает данные для распределения по месяцам.
 
         :param df: DataFrame сгруппированный по дате заезда.
         :param total_vouchers: Общее кол-во путёвок к распределению.
         :param settings: Настройки распределения.
+        :param direction: Направление распределения.
         :return: Словарь содержащий год-месяц в виде индекса и массив из 4-х элементов, где
                  1-ый элемент — кол-во путёвок в месяце,
                  2-ой элемент — процент путёвок в месяце от общего числа путёвок к распределению,
@@ -312,11 +323,12 @@ class Distribution(object):
             vouchers_per_months[month] = vouchers_in_month + list(indexes)
 
         total_vouchers_to_sanatorium_by_months = 0
+        vouchers_to_distribute = getattr(settings, direction)
 
         for date, indexes in vouchers_per_months.items():
             total_vouchers_in_month = len(indexes)
             vouchers_in_month = total_vouchers_in_month / total_vouchers
-            vouchers_to_sanatorium_in_month = settings.to_sanatorium * vouchers_in_month
+            vouchers_to_sanatorium_in_month = vouchers_to_distribute * vouchers_in_month
             vouchers_to_sanatorium_in_month_round = round(vouchers_to_sanatorium_in_month)
             total_vouchers_to_sanatorium_by_months += vouchers_to_sanatorium_in_month_round
 
@@ -335,8 +347,8 @@ class Distribution(object):
         # проверим насколько получилось правильно посчитать заявок в заездные день за все месяцы,
         # если общее число не равно указанному кол-во путёвок на распределение — добавим/вычтем
         # недостающие в последний месяц
-        if total_vouchers_to_sanatorium_by_months != settings.to_sanatorium:
-            fault_vouchers_count = settings.to_sanatorium - total_vouchers_to_sanatorium_by_months
+        if total_vouchers_to_sanatorium_by_months != vouchers_to_distribute:
+            fault_vouchers_count = vouchers_to_distribute - total_vouchers_to_sanatorium_by_months
             vouchers_per_months[list(vouchers_per_months.keys())[-1]][-1] += fault_vouchers_count
 
         return vouchers_per_months
@@ -434,7 +446,6 @@ class Distribution(object):
                 need_to_correct = True
         return need_to_correct
 
-
     @staticmethod
     def is_even(number) -> bool:
         """
@@ -442,26 +453,37 @@ class Distribution(object):
         """
         return number % 2 == 0
 
-    def get_sanatorium_vouchers(self, vouchers: pd.DataFrame, vouchers_per_days: Dict[str, List]) -> NoReturn:
+    def get_sanatorium_vouchers(
+            self,
+            vouchers: pd.DataFrame,
+            vouchers_per_days: Dict[str, List],
+            direction: str
+    ) -> NoReturn:
         """
         Функция получает унифицированный список путёвок по расчётному плану распределения.
 
         :param vouchers: Список путёвок.
         :param vouchers_per_days: Расчётные данные распределения путёвок по заездным дням.
+        :param direction: Направление распределения.
         """
         cnt_vouchers_to_distribute = {}
         for date, stat in vouchers_per_days.items():
             cnt_vouchers_to_distribute[date] = stat[-1]
 
+        delete_indexes = []
         for index, row in vouchers.iterrows():
             if cnt_vouchers_to_distribute[row['date_begin']] > 0:
                 voucher_to_distribute = row.copy()
-                voucher_to_distribute['status'] = VoucherStatus.TO_SANATORIUM
-                voucher_to_distribute['organization_id'] = voucher_to_distribute['sanatorium_id']
+                voucher_to_distribute['status'] = getattr(VoucherStatus, direction.upper())
+                if direction == 'to_sanatorium':
+                    voucher_to_distribute['organization_id'] = voucher_to_distribute['sanatorium_id']
+                else:
+                    voucher_to_distribute['organization_id'] = ''
                 self.to_sanatorium_vouchers.append(voucher_to_distribute)
                 cnt_vouchers_to_distribute[row['date_begin']] -= 1
-                vouchers.drop(index=index)
-        self._vouchers_exists = vouchers
+                delete_indexes.append(index)
+        self._df = vouchers.drop(labels=delete_indexes, axis=0)
+        self._vouchers_exists = self._df
 
     def get_sanatorium_setting(self, sanatorium_id: Optional[Hashable]) -> Union[Settings, None]:
         """

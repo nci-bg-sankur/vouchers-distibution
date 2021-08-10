@@ -215,7 +215,11 @@ if json_file_vouchers is not None:
     st.write(df)
 
     st.subheader('Контрольная таблица')
-    control_df = dist.contol_df.set_index('День заезда')
+    _directions = ['to_sanatorium', 'to_reserve']
+    directions = ['В санаторий', 'В резерв']
+    direction = st.radio('Направление распределения:', directions)
+
+    control_table = dist.get_control_df(_directions[directions.index(direction)]).set_index('День заезда')
 
     COLUMNS_CHECK = {}
 
@@ -239,7 +243,7 @@ if json_file_vouchers is not None:
 
 
     st.dataframe(
-        control_df.style.apply(
+        control_table.style.apply(
             highlight_error,
             color='red',
             subset=[
@@ -249,5 +253,5 @@ if json_file_vouchers is not None:
         )
     )
 
-    with st.beta_expander('Исходный список'):
+    with st.beta_expander('Остаточный список'):
         st.write(dist.df_exists)
