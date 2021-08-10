@@ -266,21 +266,21 @@ class Distribution(object):
         self.dump_vouchers_per_days = {'to_sanatorium': [], 'to_reserve': []}
         self.dump_total_vouchers_by_months = []
 
-        df = self._df
         self.to_sanatorium_vouchers = []
-        for sanatorium_id, total_vouchers in self.get_sanatoriums.items():
-            # выделим срез данных только по текущему санаторию
-            is_sanatorium = df['sanatorium_id'] == sanatorium_id
-            df_sanatorium = df[is_sanatorium].sort_values(by=['date_begin', 'number'])
-
-            # сгруппируем путёвки по дате заезда (заездным дням)
-            begin_dates_df = df_sanatorium.groupby('date_begin')
-
+        for sanatorium_id, _ in self.get_sanatoriums.items():
             # получим настройки распределения
             settings = self.get_sanatorium_setting(sanatorium_id)
 
             # начнём распределение по заданным направлениям
             for direction in ['to_sanatorium', 'to_reserve']:
+                # выделим срез данных только по текущему санаторию
+                is_sanatorium = self._df['sanatorium_id'] == sanatorium_id
+                df_sanatorium = self._df[is_sanatorium].sort_values(by=['date_begin', 'number'])
+                total_vouchers = len(df_sanatorium.index)
+
+                # сгруппируем путёвки по дате заезда (заездным дням)
+                begin_dates_df = df_sanatorium.groupby('date_begin')
+
                 # получим данные для распределения по месяцам
                 vouchers_per_months = self.get_vouchers_per_months(begin_dates_df, total_vouchers, settings, direction)
                 self.dump_vouchers_per_months[direction].append(vouchers_per_months)
