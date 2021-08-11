@@ -76,7 +76,7 @@ if json_file_vouchers is not None:
                 min_value=0,
                 max_value=test_options.to_medical_unit_max
             )
-            sanatorium_settings.to_medical_units[medical_unit] = test_options.to_medical_units[medical_unit]
+            sanatorium_settings.to_medical_units[medical_unit + 1] = test_options.to_medical_units[medical_unit]
             st.sidebar.info(f'{test_options.to_medical_unit_percent(medical_unit)}%')
 
         # дополним массив настроек конфигурацией распределения текущего санатория

@@ -3,6 +3,7 @@ import json
 import math
 import os
 import sys
+import enum
 
 import pandas as pd
 import requests
@@ -17,33 +18,34 @@ from urllib.parse import urljoin
 
 from pandas.core.groupby.generic import DataFrameGroupBy
 from typing import NoReturn, List, Union, Optional, Hashable, Dict
-from enum import IntEnum, unique
 
 
-@unique
-class Direction(IntEnum):
-    """Направление"""
-    RESERVED = 1  # Резерв
-    SANATORIUM = 2  # Санаторий
-    EXCHANGE = 3  # Обмен
-    MEDICAL_UNIT = 4  # МСЧ
-
-
-class VoucherStatus(IntEnum):
+class VoucherStatus(object):
     """Статусы при распределении"""
     TO_SANATORIUM = 1  # Распределение в санаторий
     TO_RESERVE = 2  # В резерв УМО
     TO_EXCHANGE = 3  # На обмен
     TO_MEDICAL_UNIT = 4  # В резерв МСЧ
 
+    def __getattribute__(self, item: str):
+        if item.startswith('to_medical_unit_'):
+            item = item[:15]
+        item = item.upper()
+        return object.__getattribute__(self, item)
 
-class Settings:
+
+class Settings(object):
     """Настройки распределения"""
     sanatorium_id: Optional[Hashable]
     to_sanatorium: int
     to_reserve: int
     to_exchange = {}
     to_medical_units = {}
+
+    def __getattribute__(self, item: str):
+        if item.startswith('to_medical_unit_'):
+            return self.to_medical_units[int(item[16:])]
+        return object.__getattribute__(self, item)
 
 
 class Distribution(object):
@@ -68,8 +70,6 @@ class Distribution(object):
     # для отладки
     dump_vouchers_per_months = {}
     dump_vouchers_per_days = {}
-    dump_arrivals_per_months = []
-    dump_total_vouchers_by_months = []
 
     def __init__(self, **kwargs):
         self.vouchers = kwargs.get('vouchers', [])
@@ -107,6 +107,8 @@ class Distribution(object):
                 status = 'В санаторий'
             elif voucher['status'] == VoucherStatus.TO_RESERVE:
                 status = 'В резерв'
+            elif voucher['status'] == VoucherStatus.TO_MEDICAL_UNIT:
+                status = 'В МСЧ'
             else:
                 status = 'Куда-то'
             row = [
@@ -259,20 +261,38 @@ class Distribution(object):
 
     def get_distribute(self) -> list:
         """
-        Функция формирует унифицированный список путёвок по распределению
+        Функция формирует унифицированный список путёвок по распределению.
+        Проходится алгоритм несколько раз по всем доступным санаториям и различным направлениям,
+        чтобы сформировать общий поочерёдный список распределённых путёвок для всех санаториев.
         """
-        self.dump_arrivals_per_months = []
-        self.dump_vouchers_per_months = {'to_sanatorium': [], 'to_reserve': []}
-        self.dump_vouchers_per_days = {'to_sanatorium': [], 'to_reserve': []}
-        self.dump_total_vouchers_by_months = []
+
+        # Для контрольной таблицы будем добавлять отладочную информацию
+        self.dump_vouchers_per_months = {
+            'to_sanatorium': [],
+            'to_reserve': []
+        }
+        self.dump_vouchers_per_days = {
+            'to_sanatorium': [],
+            'to_reserve': []
+        }
 
         self.to_sanatorium_vouchers = []
         for sanatorium_id, _ in self.get_sanatoriums.items():
             # получим настройки распределения
             settings = self.get_sanatorium_setting(sanatorium_id)
 
+            # объявляем базовые направления распределения
+            directions = ['to_sanatorium', 'to_reserve']
+
+            # дополним направления и отладочный словарь медсанчастями, если они указаны
+            if settings.to_medical_units:
+                for medical_unit_id in settings.to_medical_units.keys():
+                    directions.append('to_medical_unit_%d' % medical_unit_id)
+                    self.dump_vouchers_per_months['to_medical_unit_%d' % medical_unit_id] = []
+                    self.dump_vouchers_per_days['to_medical_unit_%d' % medical_unit_id] = []
+
             # начнём распределение по заданным направлениям
-            for direction in ['to_sanatorium', 'to_reserve']:
+            for direction in directions:
                 # выделим срез данных только по текущему санаторию
                 is_sanatorium = self._df['sanatorium_id'] == sanatorium_id
                 df_sanatorium = self._df[is_sanatorium].sort_values(by=['date_begin', 'number'])
@@ -282,7 +302,12 @@ class Distribution(object):
                 begin_dates_df = df_sanatorium.groupby('date_begin')
 
                 # получим данные для распределения по месяцам
-                vouchers_per_months = self.get_vouchers_per_months(begin_dates_df, total_vouchers, settings, direction)
+                vouchers_per_months = self.get_vouchers_per_months(
+                    begin_dates_df,
+                    total_vouchers,
+                    settings,
+                    direction
+                )
                 self.dump_vouchers_per_months[direction].append(vouchers_per_months)
 
                 # получим данные для распределения по дням
@@ -373,8 +398,6 @@ class Distribution(object):
             arrivals_per_months[date[:7]] = arrivals_per_months.get(date[:7], 0) + 1
             vouchers_per_days[date] = len(indexes)
 
-        self.dump_arrivals_per_months.append(arrivals_per_months)
-
         # сформируем массив данных для распределения по дням заезда
         for date, total_vouchers_per_day in vouchers_per_days.items():
             data_only_month = date[:7]
@@ -440,7 +463,6 @@ class Distribution(object):
         for date, stat in vouchers_per_days.items():
             month = date[:7]
             self._total_vouchers_by_months[month] = self._total_vouchers_by_months.get(month, 0) + stat[-1]
-        self.dump_total_vouchers_by_months.append(self._total_vouchers_by_months)
         for month, total_vouchers_in_month in self._total_vouchers_by_months.items():
             if vouchers_per_months[month][-1] - total_vouchers_in_month:
                 need_to_correct = True
@@ -470,15 +492,18 @@ class Distribution(object):
         for date, stat in vouchers_per_days.items():
             cnt_vouchers_to_distribute[date] = stat[-1]
 
+        voucher_status = VoucherStatus()
         delete_indexes = []
         for index, row in vouchers.iterrows():
             if cnt_vouchers_to_distribute[row['date_begin']] > 0:
                 voucher_to_distribute = row.copy()
-                voucher_to_distribute['status'] = getattr(VoucherStatus, direction.upper())
+                voucher_to_distribute['status'] = getattr(voucher_status, direction)
                 if direction == 'to_sanatorium':
-                    voucher_to_distribute['organization_id'] = voucher_to_distribute['sanatorium_id']
+                    voucher_to_distribute['organization_id'] = int(voucher_to_distribute['sanatorium_id'])
+                elif direction.startswith('to_medical_unit'):
+                    voucher_to_distribute['organization_id'] = int(direction[16:])
                 else:
-                    voucher_to_distribute['organization_id'] = ''
+                    voucher_to_distribute['organization_id'] = None
                 self.to_sanatorium_vouchers.append(voucher_to_distribute)
                 cnt_vouchers_to_distribute[row['date_begin']] -= 1
                 delete_indexes.append(index)
