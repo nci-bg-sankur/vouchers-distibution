@@ -215,9 +215,11 @@ if json_file_vouchers is not None:
     st.write(df)
 
     st.subheader('Контрольная таблица')
+    col1, col2 = st.beta_columns([4, 1])
+
     _directions = ['to_sanatorium', 'to_reserve']
     directions = ['В санаторий', 'В резерв']
-    direction = st.radio('Направление распределения:', directions)
+    direction = col2.radio('Направление распределения:', directions)
 
     control_table = dist.get_control_df(_directions[directions.index(direction)]).set_index('День заезда')
 
@@ -242,7 +244,7 @@ if json_file_vouchers is not None:
         return pd.Series(data=results, index=x.keys())
 
 
-    st.dataframe(
+    col1.dataframe(
         control_table.style.apply(
             highlight_error,
             color='red',
