@@ -42,8 +42,8 @@ class Settings:
     sanatorium_id: Optional[Hashable]
     to_sanatorium: int
     to_reserve: int
-    to_exchange: int
-    to_medical_unit: int
+    to_exchange = {}
+    to_medical_units = {}
 
 
 class Distribution(object):

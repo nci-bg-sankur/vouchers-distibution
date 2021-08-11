@@ -1,133 +1,10 @@
 import json
-import math
 
-import numpy as np
 import pandas as pd
 import streamlit as st
 
 from distributor import Distribution, Settings
-
-
-class Options:
-    def __init__(self, total_vouchers: int):
-        self.total_vouchers = total_vouchers
-
-        self._to_sanatorium = 0
-        self._to_sanatorium_percent = float(0)
-
-        self._to_reserve = 0
-        self._to_reserve_percent = float(0)
-
-        self._to_exchange = 0
-        self._to_exchange_percent = float(0)
-
-        self._to_medical_unit = 0
-        self._to_medical_unit_percent = float(0)
-
-    @property
-    def to_sanatorium(self):
-        return self._to_sanatorium
-
-    @to_sanatorium.setter
-    def to_sanatorium(self, value):
-        self._to_sanatorium = value
-
-    @property
-    def to_sanatorium_max_value(self):
-        return self.total_vouchers - (self._to_reserve + self._to_exchange + self._to_medical_unit)
-
-    @property
-    def to_sanatorium_value(self):
-        return math.floor(self._to_sanatorium_percent / 100 * self.total_vouchers)
-
-    @property
-    def to_sanatorium_percent(self):
-        return self._to_sanatorium_percent
-
-    @to_sanatorium_percent.setter
-    def to_sanatorium_percent(self, value):
-        self._to_sanatorium_percent = value
-
-    @property
-    def to_sanatorium_percent_value(self):
-        return round((self._to_sanatorium / self.total_vouchers * 100), 2)
-
-    @property
-    def to_reserve(self):
-        return self._to_reserve
-
-    @to_reserve.setter
-    def to_reserve(self, value):
-        self._to_reserve = value
-
-    @property
-    def to_reserve_max_value(self):
-        return self.total_vouchers - (self._to_sanatorium + self._to_exchange + self._to_medical_unit)
-
-    @property
-    def to_reserve_percent(self):
-        return self._to_reserve_percent
-
-    @to_reserve_percent.setter
-    def to_reserve_percent(self, value):
-        self._to_reserve_percent = value
-
-    @property
-    def to_reverse_percent_value(self):
-        return round((self._to_reserve / self.total_vouchers * 100), 2)
-
-    @property
-    def to_exchange(self):
-        return self._to_exchange
-
-    @to_exchange.setter
-    def to_exchange(self, value):
-        self._to_exchange = value
-
-    @property
-    def to_exchange_max_value(self):
-        return self.total_vouchers - (self._to_sanatorium + self._to_reserve + self._to_medical_unit)
-
-    @property
-    def to_exchange_percent(self):
-        return self._to_exchange_percent
-
-    @to_exchange_percent.setter
-    def to_exchange_percent(self, value):
-        self._to_exchange_percent = value
-
-    @property
-    def to_exchange_percent_value(self):
-        return round((self._to_exchange / self.total_vouchers * 100), 2)
-
-    @property
-    def to_medical_unit(self):
-        return self._to_medical_unit
-
-    @to_medical_unit.setter
-    def to_medical_unit(self, value):
-        self._to_medical_unit = value
-
-    @property
-    def to_medical_unit_value(self):
-        return self.to_medical_unit_max_value
-
-    @property
-    def to_medical_unit_max_value(self):
-        return self.total_vouchers - (self._to_sanatorium + self._to_reserve + self._to_exchange)
-
-    @property
-    def to_medical_unit_percent(self):
-        return self._to_medical_unit_percent
-
-    @to_medical_unit_percent.setter
-    def to_medical_unit_percent(self, value):
-        self._to_medical_unit_percent = value
-
-    @property
-    def to_medical_unit_percent_value(self):
-        return round((self._to_medical_unit / self.total_vouchers * 100), 2)
-
+from test_options import TestOptions
 
 st.set_page_config('Алгоритм распределения путёвок', layout='wide')
 
@@ -147,13 +24,12 @@ if json_file_vouchers is not None:
 
     sanatoriums = dist.get_sanatoriums
     settings = []
+    test_options = TestOptions()
     for sanatorium_id, total_vouchers in sanatoriums.items():
         # параметры настройки
         sanatorium_settings = Settings()
         sanatorium_settings.sanatorium_id = sanatorium_id
-
-        # для каждого санатория инициализирует свой класс с настройками
-        temp_options = Options(total_vouchers=total_vouchers)
+        test_options.total_vouchers = total_vouchers
 
         # выделим срез данных только по текущему санаторию
         is_sanatorium = dist.df['sanatorium_id'] == sanatorium_id
@@ -161,50 +37,57 @@ if json_file_vouchers is not None:
 
         # выводим данные по санатория
         st.sidebar.success('ID санатория: %d' % sanatorium_id)
-        st.sidebar.warning('Доступно путёвок к распределению: %d' % total_vouchers)
+        exists_vouchers = st.sidebar.empty()
 
         # выведем пользователю настройки
-        temp_options.to_sanatorium = st.sidebar.number_input(
+        test_options.to_sanatorium = st.sidebar.number_input(
             label='В санаторий',
             min_value=0,
-            max_value=temp_options.to_sanatorium_max_value,
-            value=temp_options.to_sanatorium_value,
-            key='to_sanatorium_%s' % sanatorium_id
+            max_value=test_options.to_sanatorium_max,
         )
-        sanatorium_settings.to_sanatorium = temp_options.to_sanatorium
-        temp_options.to_sanatorium_percent = st.sidebar.info(f'{temp_options.to_sanatorium_percent_value}%')
+        sanatorium_settings.to_sanatorium = test_options.to_sanatorium
+        st.sidebar.info(f'{test_options.to_sanatorium_percent}%')
 
-        temp_options.to_reserve = st.sidebar.number_input(
+        test_options.to_reserve = st.sidebar.number_input(
             label='В резерв',
             min_value=0,
-            max_value=temp_options.to_reserve_max_value,
-            value=temp_options.to_reserve,
-            key='to_reserve_%s' % sanatorium_id
+            max_value=test_options.to_reserve_max,
         )
-        sanatorium_settings.to_reserve = temp_options.to_reserve
-        temp_options.to_reserve_percent = st.sidebar.info(f'{temp_options.to_reverse_percent_value}%')
+        sanatorium_settings.to_reserve = test_options.to_reserve
+        st.sidebar.info(f'{test_options.to_reverse_percent}%')
 
-        temp_options.to_exchange = st.sidebar.number_input(
-            label='На обмен',
+        # test_options.to_exchange = st.sidebar.number_input(
+        #     label='На обмен',
+        #     min_value=0,
+        #     max_value=test_options.to_exchange_max,
+        # )
+        # sanatorium_settings.to_exchange = test_options.to_exchange
+        # st.sidebar.info(f'{test_options.to_exchange_percent}%')
+
+        test_options.medical_units = st.sidebar.number_input(
+            label='Кол-во МСЧ',
             min_value=0,
-            max_value=temp_options.to_exchange_max_value,
-            value=temp_options.to_exchange,
-            key='to_exchange_%s' % sanatorium_id
         )
-        sanatorium_settings.to_exchange = temp_options.to_exchange
-        temp_options.to_exchange_percent = st.sidebar.info(f'{temp_options.to_exchange_percent_value}%')
+        if test_options.medical_units:
+            st.sidebar.warning('Поля МСЧ на распределение заполняются поочередно.')
+        for medical_unit in range(test_options.medical_units):
+            test_options.to_medical_units[medical_unit] = st.sidebar.number_input(
+                label='В МСЧ %d' % (medical_unit + 1),
+                min_value=0,
+                max_value=test_options.to_medical_unit_max
+            )
+            sanatorium_settings.to_medical_units[medical_unit] = test_options.to_medical_units[medical_unit]
+            st.sidebar.info(f'{test_options.to_medical_unit_percent(medical_unit)}%')
 
-        temp_options.to_medical_unit = st.sidebar.number_input(
-            label='В МСЧ',
-            min_value=0,
-            max_value=temp_options.to_medical_unit_max_value,
-            value=temp_options.to_medical_unit_value,
-            key='to_medical_unit_%s' % sanatorium_id
-        )
-        sanatorium_settings.to_medical_unit = temp_options.to_medical_unit
-        temp_options.to_medical_unit_percent = st.sidebar.info(f'{temp_options.to_medical_unit_percent_value}%')
-
+        # дополним массив настроек конфигурацией распределения текущего санатория
         settings.append(sanatorium_settings)
+
+        if test_options.exists_vouchers:
+            exists_vouchers.error(
+                'Доступно путёвок к распределению: %d из %d' % (test_options.exists_vouchers, total_vouchers)
+            )
+        else:
+            exists_vouchers.error('Больше нет доступных путёвок к распределению.')
 
         # визуально разделим настройки для разных санаториев
         st.sidebar.markdown('---')
@@ -217,13 +100,15 @@ if json_file_vouchers is not None:
     st.subheader('Контрольная таблица')
     col1, col2 = st.beta_columns([4, 1])
 
-    _directions = ['to_sanatorium', 'to_reserve']
-    directions = ['В санаторий', 'В резерв']
+    _directions = ['to_sanatorium', 'to_reserve'] + ['to_medical_unit_%d' % (x + 1) for x in
+                                                     range(test_options.medical_units)]
+    directions = ['В санаторий', 'В резерв'] + ['МСЧ %d' % (x + 1) for x in range(test_options.medical_units)]
     direction = col2.radio('Направление распределения:', directions)
 
     control_table = dist.get_control_df(_directions[directions.index(direction)]).set_index('День заезда')
 
     COLUMNS_CHECK = {}
+
 
     def highlight_error(x: pd.Series, color: str):
         results = {}
